@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AxGrid;
 using AxGrid.Base;
@@ -6,37 +6,36 @@ using AxGrid.Model;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace TestUnityWork.Lootbox
-{
-    public class LootboxSlotView : MonoBehaviourExtBind
+public class LootboxSlotView : MonoBehaviourExtBind
     {
         private const float MaxSpinSpeed = 1500f;
         private const float Acceleration = 900f;
         private const float Deceleration = 2000f;
         private const float StopSpeedThreshold = 45f;
         private const float AlignDuration = 0.32f;
+        private const float AlignEpsilon = 0.5f;
 
         [SerializeField] private RectTransform viewport;
         [SerializeField] private RectTransform content;
         [SerializeField] private ParticleSystem stopParticles;
 
-        private readonly List<RectTransform> itemRects = new List<RectTransform>();
+        private readonly List<RectTransform> _itemRects = new List<RectTransform>();
 
-        private float itemHeight;
-        private float itemStep;
-        private float centerLineY;
-        private float wrapBottomY;
+        private float _itemHeight;
+        private float _itemStep;
+        private float _centerLineY;
+        private float _wrapBottomY;
 
-        private float currentSpeed;
-        private float targetSpeed;
+        private float _currentSpeed;
+        private float _targetSpeed;
 
-        private bool spinning;
-        private bool stopRequested;
-        private bool aligning;
+        private bool _spinning;
+        private bool _stopRequested;
+        private bool _aligning;
 
-        private float alignElapsed;
-        private float alignOffsetTotal;
-        private float alignOffsetApplied;
+        private float _alignElapsed;
+        private float _alignOffsetTotal;
+        private float _alignOffsetApplied;
 
         [OnAwake]
         private void AwakeThis()
@@ -48,58 +47,65 @@ namespace TestUnityWork.Lootbox
         [Bind(LootboxSignals.SpinStartRequestedEvent)]
         private void OnSpinStartRequested()
         {
-            stopRequested = false;
-            aligning = false;
-            spinning = true;
-            targetSpeed = MaxSpinSpeed;
+            _stopRequested = false;
+            _aligning = false;
+            _spinning = true;
+            _targetSpeed = MaxSpinSpeed;
 
-            if (stopParticles != null)
-            {
-                stopParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-            }
+            StopParticlesClear();
         }
 
         [Bind(LootboxSignals.SpinStopRequestedEvent)]
         private void OnSpinStopRequested()
         {
-            if (!spinning)
+            if (!_spinning)
             {
-                Settings.Invoke(LootboxSignals.SpinStoppedEvent);
+                NotifyStopped();
                 return;
             }
 
-            stopRequested = true;
-            targetSpeed = 0f;
+            _stopRequested = true;
+            _targetSpeed = 0f;
         }
 
         [OnUpdate]
         private void UpdateThis()
         {
-            if (content == null || itemRects.Count == 0)
+            if (!IsReady())
             {
                 return;
             }
 
-            if (aligning)
+            if (_aligning)
             {
                 UpdateAlignment();
                 return;
             }
 
-            if (!spinning && currentSpeed <= 0f)
+            UpdateSpin();
+        }
+
+        private bool IsReady()
+        {
+            return content != null && _itemRects.Count > 0;
+        }
+
+        private void UpdateSpin()
+        {
+            if (!_spinning && _currentSpeed <= 0f)
             {
                 return;
             }
 
-            var speedDelta = (targetSpeed > currentSpeed ? Acceleration : Deceleration) * Time.deltaTime;
-            currentSpeed = Mathf.MoveTowards(currentSpeed, targetSpeed, speedDelta);
+            var accel = _targetSpeed > _currentSpeed ? Acceleration : Deceleration;
+            _currentSpeed = Mathf.MoveTowards(_currentSpeed, _targetSpeed, accel * Time.deltaTime);
 
-            if (currentSpeed > 0f)
+            if (_currentSpeed > 0f)
             {
-                MoveItems(currentSpeed * Time.deltaTime);
+                MoveItems(_currentSpeed * Time.deltaTime);
             }
 
-            if (stopRequested && currentSpeed <= StopSpeedThreshold)
+            if (_stopRequested && _currentSpeed <= StopSpeedThreshold)
             {
                 BeginAlignment();
             }
@@ -131,7 +137,7 @@ namespace TestUnityWork.Lootbox
 
         private void CollectItems()
         {
-            itemRects.Clear();
+            _itemRects.Clear();
 
             if (content == null)
             {
@@ -145,26 +151,24 @@ namespace TestUnityWork.Lootbox
                     continue;
                 }
 
-                if (!(child is RectTransform rect))
+                if (child is RectTransform rect)
                 {
-                    continue;
+                    _itemRects.Add(rect);
                 }
-
-                itemRects.Add(rect);
             }
 
-            itemRects.Sort((a, b) => b.anchoredPosition.y.CompareTo(a.anchoredPosition.y));
+            _itemRects.Sort((a, b) => b.anchoredPosition.y.CompareTo(a.anchoredPosition.y));
 
-            if (itemRects.Count == 0)
+            if (_itemRects.Count == 0)
             {
                 return;
             }
 
-            itemHeight = Mathf.Max(1f, itemRects[0].rect.height);
-            itemStep = ComputeAverageStep();
-            if (itemStep <= 1f)
+            _itemHeight = Mathf.Max(1f, _itemRects[0].rect.height);
+            _itemStep = ComputeAverageStep();
+            if (_itemStep <= 1f)
             {
-                itemStep = itemHeight;
+                _itemStep = _itemHeight;
             }
 
             UpdateCenterLine();
@@ -172,47 +176,47 @@ namespace TestUnityWork.Lootbox
 
         private float ComputeAverageStep()
         {
-            if (itemRects.Count < 2)
+            if (_itemRects.Count < 2)
             {
                 return 0f;
             }
 
             var sum = 0f;
-            for (var i = 1; i < itemRects.Count; i++)
+            for (var i = 1; i < _itemRects.Count; i++)
             {
-                sum += Mathf.Abs(itemRects[i - 1].anchoredPosition.y - itemRects[i].anchoredPosition.y);
+                sum += Mathf.Abs(_itemRects[i - 1].anchoredPosition.y - _itemRects[i].anchoredPosition.y);
             }
 
-            return sum / (itemRects.Count - 1);
+            return sum / (_itemRects.Count - 1);
         }
 
         private void UpdateCenterLine()
         {
             if (viewport == null || content == null)
             {
-                centerLineY = -itemHeight * 1.5f;
-                wrapBottomY = centerLineY - (itemHeight * 2f);
+                _centerLineY = -_itemHeight * 1.5f;
+                _wrapBottomY = _centerLineY - (_itemHeight * 2f);
                 return;
             }
 
             var centerWorld = viewport.TransformPoint(viewport.rect.center);
             var centerLocal = content.InverseTransformPoint(centerWorld);
-            centerLineY = centerLocal.y;
+            _centerLineY = centerLocal.y;
 
             var bottomWorld = viewport.TransformPoint(new Vector3(0f, viewport.rect.yMin, 0f));
             var bottomLocal = content.InverseTransformPoint(bottomWorld);
-            wrapBottomY = bottomLocal.y - itemHeight;
+            _wrapBottomY = bottomLocal.y - _itemHeight;
         }
 
         private void MoveItems(float deltaY)
         {
             var topY = float.MinValue;
 
-            for (var i = 0; i < itemRects.Count; i++)
+            for (var i = 0; i < _itemRects.Count; i++)
             {
-                var pos = itemRects[i].anchoredPosition;
+                var pos = _itemRects[i].anchoredPosition;
                 pos.y -= deltaY;
-                itemRects[i].anchoredPosition = pos;
+                _itemRects[i].anchoredPosition = pos;
 
                 if (pos.y > topY)
                 {
@@ -220,32 +224,32 @@ namespace TestUnityWork.Lootbox
                 }
             }
 
-            for (var i = 0; i < itemRects.Count; i++)
+            for (var i = 0; i < _itemRects.Count; i++)
             {
-                var pos = itemRects[i].anchoredPosition;
-                if (pos.y >= wrapBottomY)
+                var pos = _itemRects[i].anchoredPosition;
+                if (pos.y >= _wrapBottomY)
                 {
                     continue;
                 }
 
-                pos.y = topY + itemStep;
-                itemRects[i].anchoredPosition = pos;
+                pos.y = topY + _itemStep;
+                _itemRects[i].anchoredPosition = pos;
                 topY = pos.y;
             }
         }
 
         private void BeginAlignment()
         {
-            stopRequested = false;
-            aligning = true;
+            _stopRequested = false;
+            _aligning = true;
 
             var nearestItem = GetItemClosestToCenter();
-            var nearestCenterY = nearestItem.anchoredPosition.y - (itemHeight * 0.5f);
-            alignOffsetTotal = centerLineY - nearestCenterY;
-            alignOffsetApplied = 0f;
-            alignElapsed = 0f;
+            var nearestCenterY = nearestItem.anchoredPosition.y - (_itemHeight * 0.5f);
+            _alignOffsetTotal = _centerLineY - nearestCenterY;
+            _alignOffsetApplied = 0f;
+            _alignElapsed = 0f;
 
-            if (Mathf.Abs(alignOffsetTotal) <= 0.5f)
+            if (Mathf.Abs(_alignOffsetTotal) <= AlignEpsilon)
             {
                 FinishStop();
             }
@@ -253,16 +257,16 @@ namespace TestUnityWork.Lootbox
 
         private RectTransform GetItemClosestToCenter()
         {
-            var best = itemRects[0];
+            var best = _itemRects[0];
             var bestDistance = float.MaxValue;
 
-            for (var i = 0; i < itemRects.Count; i++)
+            for (var i = 0; i < _itemRects.Count; i++)
             {
-                var itemCenter = itemRects[i].anchoredPosition.y - (itemHeight * 0.5f);
-                var distance = Mathf.Abs(centerLineY - itemCenter);
+                var itemCenter = _itemRects[i].anchoredPosition.y - (_itemHeight * 0.5f);
+                var distance = Mathf.Abs(_centerLineY - itemCenter);
                 if (distance < bestDistance)
                 {
-                    best = itemRects[i];
+                    best = _itemRects[i];
                     bestDistance = distance;
                 }
             }
@@ -272,20 +276,20 @@ namespace TestUnityWork.Lootbox
 
         private void UpdateAlignment()
         {
-            alignElapsed += Time.deltaTime;
-            var t = Mathf.Clamp01(alignElapsed / AlignDuration);
+            _alignElapsed += Time.deltaTime;
+            var t = Mathf.Clamp01(_alignElapsed / AlignDuration);
             var eased = 1f - Mathf.Pow(1f - t, 3f);
-            var targetApplied = alignOffsetTotal * eased;
-            var delta = targetApplied - alignOffsetApplied;
-            alignOffsetApplied = targetApplied;
+            var targetApplied = _alignOffsetTotal * eased;
+            var delta = targetApplied - _alignOffsetApplied;
+            _alignOffsetApplied = targetApplied;
 
             if (Mathf.Abs(delta) > 0f)
             {
-                for (var i = 0; i < itemRects.Count; i++)
+                for (var i = 0; i < _itemRects.Count; i++)
                 {
-                    var pos = itemRects[i].anchoredPosition;
+                    var pos = _itemRects[i].anchoredPosition;
                     pos.y += delta;
-                    itemRects[i].anchoredPosition = pos;
+                    _itemRects[i].anchoredPosition = pos;
                 }
             }
 
@@ -297,20 +301,39 @@ namespace TestUnityWork.Lootbox
 
         private void FinishStop()
         {
-            aligning = false;
-            spinning = false;
-            stopRequested = false;
-            currentSpeed = 0f;
-            targetSpeed = 0f;
+            _aligning = false;
+            _spinning = false;
+            _stopRequested = false;
+            _currentSpeed = 0f;
+            _targetSpeed = 0f;
 
-            if (stopParticles != null)
-            {
-                stopParticles.Clear(true);
-                stopParticles.Play(true);
-            }
-
-            Settings.Invoke(LootboxSignals.SpinStoppedEvent);
+            PlayStopParticles();
+            NotifyStopped();
         }
 
+        private void StopParticlesClear()
+        {
+            if (stopParticles == null)
+            {
+                return;
+            }
+
+            stopParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        private void PlayStopParticles()
+        {
+            if (stopParticles == null)
+            {
+                return;
+            }
+
+            stopParticles.Clear(true);
+            stopParticles.Play(true);
+        }
+
+        private void NotifyStopped()
+        {
+            Settings.Invoke(LootboxSignals.SpinStoppedEvent);
+        }
     }
-}

@@ -1,10 +1,8 @@
-﻿using AxGrid;
+using AxGrid;
 using AxGrid.FSM;
 using AxGrid.Model;
 
-namespace TestUnityWork.Lootbox
-{
-    public static class LootboxStateMachine
+public static class LootboxStateMachine
     {
         private const string BootStateName = "__lb_boot";
         private const string IdleStateName = "__lb_idle";
@@ -27,6 +25,11 @@ namespace TestUnityWork.Lootbox
         {
             Settings.Model.Set(LootboxSignals.StartButtonEnabledField, startEnabled);
             Settings.Model.Set(LootboxSignals.StopButtonEnabledField, stopEnabled);
+        }
+
+        private static void Send(string signal)
+        {
+            Settings.Invoke(signal);
         }
 
         [State(BootStateName)]
@@ -66,7 +69,7 @@ namespace TestUnityWork.Lootbox
             private void EnterThis()
             {
                 SetButtons(false, false);
-                Settings.Invoke(LootboxSignals.SpinStartRequestedEvent);
+                Send(LootboxSignals.SpinStartRequestedEvent);
             }
 
             [One(3f)]
@@ -102,7 +105,7 @@ namespace TestUnityWork.Lootbox
             private void EnterThis()
             {
                 SetButtons(false, false);
-                Settings.Invoke(LootboxSignals.SpinStopRequestedEvent);
+                Send(LootboxSignals.SpinStopRequestedEvent);
             }
 
             [Bind(LootboxSignals.SpinStoppedEvent)]
@@ -112,4 +115,3 @@ namespace TestUnityWork.Lootbox
             }
         }
     }
-}
